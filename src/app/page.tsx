@@ -1,11 +1,19 @@
+
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Upload, Download, Edit3, ShieldAlert, FileText, Image as ImageIcon, AlertTriangle, RefreshCw } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Import worker for pdfjs
-import 'pdfjs-dist/build/pdf.worker.entry';
+// Configure PDF.js worker:
+// pdfjsLib.GlobalWorkerOptions.workerSrc needs to be set for pdf.js to function correctly.
+// For Webpack 5+ (which Next.js uses), the recommended way is new URL(...) with import.meta.url.
+if (typeof window !== 'undefined') {
+  // This tells pdf.js where to load its worker script from.
+  // Webpack (or Turbopack) will handle bundling 'pdfjs-dist/build/pdf.worker.mjs'
+  // and resolving its URL correctly here.
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.mjs', import.meta.url).toString();
+}
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -350,3 +358,11 @@ export default function IdMarkPage() {
     </div>
   );
 }
+
+    
+
+    
+
+    
+
+    
