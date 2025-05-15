@@ -1,14 +1,14 @@
 
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Upload, Download, Edit3, ShieldAlert, FileText, Image as ImageIcon, AlertTriangle, RefreshCw } from 'lucide-react';
 import * as pdfjsLib from 'pdfjs-dist';
 
 // Configure PDF.js worker:
 if (typeof window !== 'undefined') {
-  // pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.js', import.meta.url).toString(); // Older Next.js/Webpack
-  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.mjs', import.meta.url).toString(); // For Next.js 15+ with Turbopack or modern Webpack
+  // For Next.js 15+ with Turbopack or modern Webpack
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.mjs', import.meta.url).toString();
 }
 
 import { Button } from '@/components/ui/button';
@@ -30,65 +30,61 @@ export default function IdMarkPage() {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const originalImageRef = useRef<HTMLImageElement | null>(null); // Still used to set its src for potential direct use/debug, but not primary for watermarking
-
   const resetState = useCallback(() => {
     setOriginalFile(null);
-    // No need to clear originalImagePreviewSrc here, useEffect for originalFile will handle it.
-    // setOriginalImagePreviewSrc(null); 
+    setOriginalImagePreviewSrc(null);
     setWatermarkedImageSrc(null);
     setIsLoading(false);
     setProgress(0);
     setError(null);
-    if (originalImageRef.current) {
-      originalImageRef.current.src = ""; 
-    }
     const fileInput = document.getElementById('file-upload') as HTMLInputElement;
     if (fileInput) {
-      fileInput.value = ""; 
+      fileInput.value = "";
     }
   }, []);
-  
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    resetState(); // Reset previous state first
+    
+    // Always reset previous state when a new file interaction occurs
+    resetState();
 
     if (file) {
       if (file.type !== 'application/pdf' && !file.type.startsWith('image/')) {
-        setError("Unsupported file type. Please upload an image (PNG, JPG) or PDF.");
-        toast({ title: "Unsupported File", description: "Please upload an image (PNG, JPG) or PDF.", variant: "destructive" });
-        setOriginalFile(null); // Ensure originalFile is null if invalid
-        return; 
+        const errText = "Unsupported file type. Please upload an image (PNG, JPG) or PDF.";
+        setError(errText);
+        toast({ title: "Unsupported File", description: errText, variant: "destructive" });
+        // setOriginalFile(null) is handled by resetState()
+        return;
       }
 
       if (file.size > 20 * 1024 * 1024) { // 20MB limit
-        setError("File is too large. Maximum size is 20MB.");
-        toast({ title: "Error", description: "File is too large. Maximum size is 20MB.", variant: "destructive" });
-        setOriginalFile(null); // Ensure originalFile is null if invalid
+        const errText = "File is too large. Maximum size is 20MB.";
+        setError(errText);
+        toast({ title: "Error", description: errText, variant: "destructive" });
+        // setOriginalFile(null) is handled by resetState()
         return;
       }
       
-      setOriginalFile(file); // Set file only if all checks pass
-      // setError(null) was called in resetState
-    } else {
-      setOriginalFile(null); // Handles case where user clears selection from dialog
+      // If checks pass, set the file. Error state was cleared by resetState.
+      setOriginalFile(file);
     }
+    // If no file is selected (e.g., user cancels dialog), originalFile is already null due to resetState.
   };
 
   useEffect(() => {
     if (!originalFile) {
+      // If originalFile is null, ensure preview is also cleared.
+      // Other states like isLoading/progress/error are managed by resetState or specific error handlers.
       setOriginalImagePreviewSrc(null);
-      if (originalImageRef.current) {
-        originalImageRef.current.src = "";
-      }
-      // Don't reset isLoading/progress/error here if they were set by handleFileChange for an invalid file
-      // Let resetState handle general resets or successful processing handle its own.
       return;
     }
 
+    // This effect runs when originalFile changes and is valid.
+    // resetState would have cleared any previous error messages.
     setIsLoading(true);
     setProgress(10);
-    setError(null); 
+    setError(null); // Explicitly clear error related to file processing
 
     const reader = new FileReader();
 
@@ -100,8 +96,8 @@ export default function IdMarkPage() {
         if (originalFile.type === 'application/pdf') {
           const pdf = await pdfjsLib.getDocument({ data: atob(fileSrc.split(',')[1]) }).promise;
           setProgress(50);
-          const page = await pdf.getPage(1); 
-          const viewport = page.getViewport({ scale: 2.0 }); 
+          const page = await pdf.getPage(1);
+          const viewport = page.getViewport({ scale: 2.0 });
           
           const canvas = document.createElement('canvas');
           canvas.width = viewport.width;
@@ -115,22 +111,23 @@ export default function IdMarkPage() {
           setProgress(70);
           const imageSrc = canvas.toDataURL('image/png');
           setOriginalImagePreviewSrc(imageSrc);
-          if(originalImageRef.current) originalImageRef.current.src = imageSrc; // For hidden img
         } else if (originalFile.type.startsWith('image/')) {
           setOriginalImagePreviewSrc(fileSrc);
-          if(originalImageRef.current) originalImageRef.current.src = fileSrc; // For hidden img
         }
         setProgress(100);
+        toast({ title: "File Loaded", description: `${originalFile.name} ready for watermarking.` });
       } catch (err: any) {
         console.error("Error processing file:", err);
         const errorMessage = err.message || "Failed to load or process the file.";
         setError(errorMessage);
         toast({ title: "Processing Error", description: errorMessage, variant: "destructive" });
-        setOriginalImagePreviewSrc(null);
-        if(originalImageRef.current) originalImageRef.current.src = "";
-        // setOriginalFile(null); // Don't null originalFile here, let user decide to re-select or clear.
+        setOriginalImagePreviewSrc(null); // Clear preview on error
+        // Don't null originalFile here, let user decide to re-select or clear.
+        // isLoading will be set to false in finally
       } finally {
         setIsLoading(false);
+        // Don't reset progress to 0 here if it was successful, let it show 100%
+        // If error, progress is less relevant than the error message.
       }
     };
 
@@ -141,12 +138,12 @@ export default function IdMarkPage() {
       setIsLoading(false);
       setProgress(0);
       setOriginalImagePreviewSrc(null);
-      // setOriginalFile(null); 
+      // setOriginalFile(null); // Let user decide to re-select.
     };
     
     reader.readAsDataURL(originalFile);
 
-  }, [originalFile, toast, resetState]);
+  }, [originalFile, toast, resetState]); // resetState is included if its definition might change, though it's stable here.
 
   const applyWatermark = useCallback(() => {
     if (!originalImagePreviewSrc) {
@@ -160,7 +157,7 @@ export default function IdMarkPage() {
     setProgress(0);
 
     const img = new Image();
-    // img.crossOrigin = "anonymous"; // Not strictly necessary for data URIs, can sometimes cause issues.
+    // No crossOrigin needed for data URIs
 
     img.onload = () => {
       try {
@@ -180,29 +177,34 @@ export default function IdMarkPage() {
         const text = watermarkText || "CONFIDENTIAL";
         const fontSize = Math.max(12, Math.min(canvas.width, canvas.height) / 25);
         ctx.font = `bold ${fontSize}px sans-serif`;
-        ctx.fillStyle = "rgba(128, 128, 128, 0.35)";
+        ctx.fillStyle = "rgba(128, 128, 128, 0.35)"; // Neutral gray with transparency
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
         
         setProgress(60);
 
-        const angle = -Math.PI / 4;
+        // Watermark tiling logic
+        const angle = -Math.PI / 4; // Diagonal angle
         const textMetrics = ctx.measureText(text);
         const textWidth = textMetrics.width;
-        
+        // const textHeight = fontSize; // Approximate height
+
+        // Calculate spacing based on image dimensions and text size
         const diagonalLength = Math.sqrt(canvas.width * canvas.width + canvas.height * canvas.height);
-        const repetitions = Math.ceil(diagonalLength / (textWidth * 0.7)); 
-        const step = diagonalLength / Math.max(5, repetitions); 
+        const repetitions = Math.ceil(diagonalLength / (textWidth * 0.7)); // Ensure coverage, adjust 0.7 for density
+        const step = diagonalLength / Math.max(5, repetitions); // Dynamic step, ensure at least 5 steps
 
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.rotate(angle);
         
+        // Tile the watermark
         for (let y = -diagonalLength / 2; y < diagonalLength / 2; y += step) {
-          for (let x = -diagonalLength / 2; x < diagonalLength / 2; x += step * 2.5) {
+          for (let x = -diagonalLength / 2; x < diagonalLength / 2; x += step * 2.5) { // Wider horizontal spacing
              ctx.fillText(text, x, y);
           }
         }
         
+        // Reset transformations
         ctx.rotate(-angle);
         ctx.translate(-canvas.width / 2, -canvas.height / 2);
 
@@ -218,12 +220,13 @@ export default function IdMarkPage() {
         setWatermarkedImageSrc(null);
       } finally {
         setIsLoading(false);
-        setProgress(0); 
+        // Don't reset progress to 0 if successful
       }
     };
 
     img.onerror = (errEv) => {
         console.error("Error loading image for watermarking (in-memory Image object):", errEv);
+        // This error means originalImagePreviewSrc itself is problematic for canvas use
         setError("Failed to load image for watermarking. The image data might be corrupted or the format is unsupported by the browser for canvas operations.");
         toast({ title: "Watermark Error", description: "Failed to load image for watermarking. Please try again or use a different file.", variant: "destructive" });
         setIsLoading(false);
@@ -231,7 +234,7 @@ export default function IdMarkPage() {
         setWatermarkedImageSrc(null);
     };
     
-    img.src = originalImagePreviewSrc; // Trigger loading
+    img.src = originalImagePreviewSrc; // Trigger loading of the preview source into the in-memory image
 
   }, [originalImagePreviewSrc, watermarkText, toast]);
 
@@ -239,10 +242,14 @@ export default function IdMarkPage() {
     if (!watermarkedImageSrc || !originalFile) return;
     const link = document.createElement('a');
     link.href = watermarkedImageSrc;
+    
     const fileNameParts = originalFile.name.split('.');
-    const extension = fileNameParts.pop() || 'png';
-    const nameWithoutExtension = fileNameParts.join('.') || 'document';
+    const extension = fileNameParts.pop() || 'png'; // Default to png if no extension
+    const nameWithoutExtension = fileNameParts.join('.') || 'document'; // Default to 'document' if no name part
+    
+    // If original was PDF, downloaded watermarked image is PNG. Otherwise, keep original extension.
     link.download = `${nameWithoutExtension}_watermarked.${originalFile.type === 'application/pdf' ? 'png' : extension}`;
+    
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -257,11 +264,7 @@ export default function IdMarkPage() {
       </header>
 
       <main className="w-full max-w-4xl space-y-6">
-        <img ref={originalImageRef} alt="Original for processing" className="hidden" 
-          onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-            console.error("Hidden image load error. Src (start):", e.currentTarget.src.substring(0, 100));
-          }}
-        />
+        {/* Hidden image element removed */}
 
         <Card className="shadow-lg">
           <CardHeader>
@@ -281,14 +284,14 @@ export default function IdMarkPage() {
           </CardContent>
         </Card>
 
-        {isLoading && progress > 0 && (
+        {isLoading && progress > 0 && ( // Show progress if loading and progress has started
            <div className="w-full p-4 rounded-md bg-card">
              <Progress value={progress} className="w-full" />
              <p className="text-sm text-muted-foreground text-center mt-2">Processing: {progress}%</p>
            </div>
         )}
 
-        {error && (
+        {error && ( // Display error if any
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertTitle>Error</AlertTitle>
@@ -296,7 +299,7 @@ export default function IdMarkPage() {
           </Alert>
         )}
 
-        {originalImagePreviewSrc && !isLoading && !error && (
+        {originalImagePreviewSrc && !isLoading && !error && ( // Show watermark customization only if preview exists, not loading, and no error
           <Card className="shadow-lg">
             <CardHeader>
               <CardTitle className="flex items-center"><Edit3 className="mr-2 h-6 w-6 text-primary" />Customize Watermark</CardTitle>
@@ -320,14 +323,16 @@ export default function IdMarkPage() {
           </Card>
         )}
         
+        {/* Preview & Download Section: Show if either original or watermarked preview exists, not loading, and no overriding error */}
         {(originalImagePreviewSrc || watermarkedImageSrc) && !isLoading && !error && (
           <Card className="shadow-lg">
             <CardHeader>
               <CardTitle className="flex items-center">
+                {/* Dynamically choose icon based on original file type if available */}
                 {originalFile?.type === 'application/pdf' ? <FileText className="mr-2 h-6 w-6 text-primary" /> : <ImageIcon className="mr-2 h-6 w-6 text-primary" />}
                 Preview & Download
               </CardTitle>
-              <CardDescription>Review your document. The original is on the left, watermarked on the right.</CardDescription>
+              <CardDescription>Review your document. The original is on the left, watermarked on the right (if applied).</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
@@ -353,7 +358,7 @@ export default function IdMarkPage() {
                 </div>
               </div>
             </CardContent>
-            {watermarkedImageSrc && (
+            {watermarkedImageSrc && ( // Download button only if watermarked image exists
               <CardFooter>
                 <Button onClick={handleDownload} disabled={isLoading || !watermarkedImageSrc}>
                   <Download className="mr-2 h-5 w-5" /> Download Watermarked Image
