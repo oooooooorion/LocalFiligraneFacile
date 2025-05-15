@@ -13,7 +13,7 @@ RUN npm run build
 # Stage 2: Setup Nginx
 FROM nginx:alpine as runner
 
-COPY --from=builder /app/build /usr/share/nginx/html
+COPY --from=builder /app/.next /usr/share/nginx/html
 
 EXPOSE 80
 
