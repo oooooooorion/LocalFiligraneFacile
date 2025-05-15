@@ -31,6 +31,6 @@ No clue
 
 ## Docker Installation
 
-```docker build -t nginx-LocalFiligraneFacile .```
+```docker build -t nginx-localfiligranefacile .```
 
-```docker run -d -p 80:80 -p 443:443 nginx-LocalFiligraneFacile```
+```docker run -d -p 80:80 -p 443:443 nginx-localfiligranefacile```
